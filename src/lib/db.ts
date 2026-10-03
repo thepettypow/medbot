@@ -38,12 +38,15 @@ export async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
 
 export async function kvSet(key: string, value: unknown) {
   await query(
-    `INSERT INTO kv(key,value,updated_at) VALUES ($1,$2,now())
-     ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=now()`,
+    `INSERT INTO kv(key,value,updated_at) VALUES ($1,$2::text::jsonb,now())
+     ON CONFLICT (key) DO UPDATE SET value=$2::text::jsonb, updated_at=now()`,
     [key, JSON.stringify(value)],
   );
 }
 export async function kvGet<T = any>(key: string): Promise<{ value: T; updated_at: Date } | null> {
   const r = await query(`SELECT value, updated_at FROM kv WHERE key=$1`, [key]);
-  return r[0] ?? null;
+  if (!r[0]) return null;
+  // tolerate a double-encoded value (a JSON string holding JSON)
+  const v = typeof r[0].value === "string" ? JSON.parse(r[0].value) : r[0].value;
+  return { value: v, updated_at: r[0].updated_at };
 }
