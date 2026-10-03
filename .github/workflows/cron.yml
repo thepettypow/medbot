@@ -1,0 +1,20 @@
+# External pinger for Vercel Hobby (built-in Vercel Cron is limited to once/day there).
+# GitHub schedules are best-effort (>=5 min, can be delayed). For <1 min accuracy use Vercel Pro
+# (see vercel.pro.json) or cron-job.org. Idempotency makes extra/overlapping pings safe.
+# Repo secrets: APP_URL (e.g. https://your-app.vercel.app), CRON_SECRET
+name: reminder-cron
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: remind
+        run: curl -fsS --retry 2 -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.APP_URL }}/api/cron/remind"
+      - name: cleanup (only on the :00 tick of every 6th hour)
+        run: |
+          if [ "$(date -u +%M)" -lt 5 ] && [ $(( $(date -u +%H) % 6 )) -eq 0 ]; then
+            curl -fsS --retry 2 -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.APP_URL }}/api/cron/cleanup"
+          fi
