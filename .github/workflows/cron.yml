@@ -15,7 +15,8 @@ jobs:
         run: |
           [ -n "${{ secrets.APP_URL }}" ] && [ -n "${{ secrets.CRON_SECRET }}" ] || { echo "::error::APP_URL / CRON_SECRET repo secrets are not set"; exit 1; }
       - name: remind
-        run: curl -fsS --retry 2 -w '\nHTTP %{http_code}\n' -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.APP_URL }}/api/cron/remind"
+        run: |
+          curl -fsS --retry 2 -w '\nHTTP %{http_code}\n' -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.APP_URL }}/api/cron/remind"
       - name: cleanup (only on the :00 tick of every 6th hour)
         run: |
           if [ "$(date -u +%M)" -lt 5 ] && [ $(( $(date -u +%H) % 6 )) -eq 0 ]; then
