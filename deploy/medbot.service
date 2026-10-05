@@ -1,0 +1,23 @@
+# /etc/systemd/system/medbot.service
+[Unit]
+Description=medbot Telegram medication reminder
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=medbot
+WorkingDirectory=/opt/medbot
+ExecStart=/usr/bin/node --env-file=/opt/medbot/.env --import tsx src/server.ts
+Restart=always
+RestartSec=3
+# give the scheduler time to finish an in-flight tick
+TimeoutStopSec=30
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/medbot
+
+[Install]
+WantedBy=multi-user.target

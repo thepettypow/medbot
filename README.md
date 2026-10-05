@@ -1,48 +1,62 @@
 # medbot — Medication reminder Telegram bot
 
-Next.js (Vercel) + grammY (webhook) + Neon Postgres. The bot talks Persian; all strings are in `src/i18n/fa.ts`.
+Node (single process on a VPS) + grammY (long polling) + Neon Postgres. The bot talks Persian; all strings are in `src/i18n/fa.ts`.
 Reminder only: no medical advice, no dose suggestions.
 
-## Setup
+## Architecture
 
-1. **Neon**: create a project in an EU region (e.g. Frankfurt), copy the pooled connection string.
-2. **Telegram**: create a bot with @BotFather, copy the token.
-3. **Env vars** (see `.env.example`): `BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` (random), `CRON_SECRET` (random),
-   `DATABASE_URL`, `ADMIN_CHAT_IDS` (comma-separated numeric Telegram IDs; get yours from @userinfobot).
-   Set them in Vercel (Project → Settings → Environment Variables, region **fra1**) and locally for the scripts below.
-4. **Schema**: `DATABASE_URL=... npm run migrate` (idempotent, safe to re-run).
-5. **Deploy** to Vercel, then register the webhook:
-   ```
-   BOT_TOKEN=... TELEGRAM_WEBHOOK_SECRET=... npm run set-webhook -- https://<your-app>.vercel.app
-   ```
-   This sets `secret_token` and `allowed_updates = message, callback_query, my_chat_member`.
-6. **Scheduler** (pick one; the logic is identical, idempotency makes overlapping pings safe):
-   - **Vercel Pro**: `cp vercel.pro.json vercel.json` (remind every minute, cleanup every 6 h). Vercel sends
-     `Authorization: Bearer $CRON_SECRET` automatically. *A per-minute cron in `vercel.json` makes Hobby deploys fail, which is why it is not the default.*
-   - **Hobby / anything else**: `.github/workflows/cron.yml` pings every 5 min (add repo secrets `APP_URL`, `CRON_SECRET`),
-     or use cron-job.org with the header `Authorization: Bearer <CRON_SECRET>` on `GET /api/cron/remind` (1–5 min)
-     and `GET /api/cron/cleanup` (every few hours). GitHub's schedule is best-effort, so with a 5-min pinger set
-     `DUE_WINDOW_MIN=10` and `STALE_AFTER_MIN=10` to survive jitter. The "<60 s" goal needs a 1-min scheduler.
-7. Smoke test: open `/api/health` → `{"ok":true}`; message your bot `/admin`; check `/status`.
+One long-running Node process on a VPS. The data stays in Neon Postgres.
 
-## How it works
-
-- `POST /api/telegram` — webhook (secret-token verified by grammY).
-- `GET /api/cron/remind` — computes due doses in each person's timezone (luxon; DST-safe), inserts a `dose_events` row
-  guarded by `UNIQUE (medication_time_id, scheduled_for)` (**only the insert that wins sends**), groups same-time meds into one message,
-  retries failed sends (atomic claim, max 3), re-sends finished snoozes, sends re-nudges, marks unanswered doses `missed`.
-  Doses older than `STALE_AFTER_MIN` are **never sent** — they become `missed_system` and the admin is told.
-- `GET /api/cron/cleanup` — purges old invites/flow state, marks stragglers, alerts admins if the reminder cron went quiet.
-- `GET /api/health` — DB check.
+- **Bot**: grammY long polling. No domain, TLS or webhook needed. On start it removes any old webhook.
+- **Scheduler** (`src/scheduler.ts`): an in-process clock that ticks just after every minute boundary
+  (`hh:mm:00.3`). Dose times are whole minutes, so a 12:00 dose goes out at ~12:00:00. It also runs once on
+  boot to catch up anything still inside `DUE_WINDOW_MIN`. Ticks never overlap. Cleanup runs on boot and every 6 h.
+- **Postgres** is the source of truth and the idempotency gate: a dose row is `UNIQUE (medication_time_id, scheduled_for)`
+  and only the insert that wins sends, so a restart, a crash mid-tick or an accidental second instance can never double-send.
+- Doses older than `STALE_AFTER_MIN` (e.g. the process was down) are **never sent late**: they become `missed_system` and the admin is told.
 - Every dose status change is written to `dose_status_log` by a DB trigger (audit trail).
 - Every dose button update is `UPDATE … WHERE status='sent'`, so concurrent taps cannot double-apply.
+- Optional `GET /health` on `127.0.0.1:$HEALTH_PORT` → `{ok, db, tickAgeSec}` (503 if the DB is down or no tick in 3 min).
+- Logs go to stdout (`journalctl -u medbot -f`): one `tick` line per minute with sent/failed counts and `lateMs`.
+  Message text, names and medications are never logged.
+
+## Setup (VPS, Ubuntu/Debian)
+
+1. **Node 22.9+** (`node -v`) and a synced clock: `timedatectl` should say `System clock synchronized: yes`
+   (accuracy is only as good as the server clock).
+2. **Telegram**: create a bot with @BotFather. Get your numeric ID from @userinfobot.
+3. **Code**:
+   ```
+   sudo useradd --system --home /opt/medbot --shell /usr/sbin/nologin medbot
+   sudo git clone <repo-url> /opt/medbot && cd /opt/medbot
+   sudo npm ci --omit=dev
+   sudo cp .env.example .env && sudo nano .env      # BOT_TOKEN, ADMIN_CHAT_IDS, DATABASE_URL
+   sudo chown -R medbot:medbot /opt/medbot && sudo chmod 600 .env
+   ```
+4. **Schema**: `npm run migrate` (idempotent, safe to re-run).
+5. **Service**:
+   ```
+   sudo cp deploy/medbot.service /etc/systemd/system/
+   sudo systemctl daemon-reload && sudo systemctl enable --now medbot
+   journalctl -u medbot -f        # expect "bot started" and a "tick" line every minute
+   ```
+6. Smoke test: message your bot `/admin`, then `/status` (last scheduler run should be 0–1 min ago).
+
+**Update**: `cd /opt/medbot && sudo git pull && sudo npm ci --omit=dev && npm run migrate && sudo systemctl restart medbot`.
+A restart is safe: doses due during the gap (up to `DUE_WINDOW_MIN`) are sent on boot.
+
+Run **one** instance per bot token. Telegram allows only one long-polling consumer; a second one gets 409 errors.
+The reminders themselves would still never double-send.
+
+Local dev: `cp .env.example .env`, fill it in, `npm run dev`.
 
 ### Config (all optional)
 
 | Var | Default | |
 |---|---|---|
 | `DEFAULT_TIMEZONE` | `Asia/Tehran` | offered as the quick-tap default. Must be a valid IANA id (`Asia/Tehran`, **not** `Iran/Tehran`) |
-| `DUE_WINDOW_MIN` / `STALE_AFTER_MIN` | 10 / 10 | send window; older than this ⇒ `missed_system` |
+| `DUE_WINDOW_MIN` / `STALE_AFTER_MIN` | 10 / 10 | send window after a restart; older than this ⇒ `missed_system` |
+| `HEALTH_PORT` / `HEALTH_HOST` | 0 (off) / `127.0.0.1` | local health endpoint |
 | `MISSED_AFTER_MIN` | 120 | no answer ⇒ `missed` |
 | `NUDGE_OFFSETS_MIN` | `15,45` | re-nudge schedule; empty disables |
 | `SNOOZE_MIN` / `MAX_SNOOZES` | 30 / 2 | |
@@ -53,8 +67,8 @@ Reminder only: no medical advice, no dose suggestions.
 npm test                                   # unit tests (time parsing, DST)
 TEST_DATABASE_URL=postgres://... npm test  # + engine and end-to-end bot tests on a scratch Postgres
 ```
-The DB tests `TRUNCATE` the tables, so point them at a throwaway database. They cover idempotency under 5 concurrent crons,
-stale doses, grouping, retries, nudges, snooze limits, block handling, consent/invite rules, hard delete and route auth.
+The DB tests `TRUNCATE` the tables, so point them at a throwaway database. They cover idempotency under 5 concurrent ticks,
+stale doses, grouping, retries, nudges, snooze limits, block handling, consent/invite rules, hard delete and the scheduler's minute alignment.
 
 ## Behaviour notes / deliberate choices
 

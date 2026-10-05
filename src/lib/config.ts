@@ -5,8 +5,6 @@ const num = (v: string | undefined, d: number) => {
 
 export const config = {
   get botToken() { return need("BOT_TOKEN"); },
-  get webhookSecret() { return need("TELEGRAM_WEBHOOK_SECRET"); },
-  get cronSecret() { return need("CRON_SECRET"); },
   get databaseUrl() { return need("DATABASE_URL"); },
   get adminChatIds(): number[] {
     return (process.env.ADMIN_CHAT_IDS ?? "").split(",").map((s) => Number(s.trim())).filter(Number.isFinite);
@@ -19,6 +17,9 @@ export const config = {
   get missedAfterMin() { return num(process.env.MISSED_AFTER_MIN, 120); },
   get snoozeMin() { return num(process.env.SNOOZE_MIN, 30); },
   get maxSnoozes() { return num(process.env.MAX_SNOOZES, 2); },
+  get cleanupEveryMin() { return num(process.env.CLEANUP_EVERY_MIN, 360); },
+  get healthPort() { return num(process.env.HEALTH_PORT, 0); },
+  get healthHost() { return process.env.HEALTH_HOST || "127.0.0.1"; },
   get maxSendAttempts() { return num(process.env.MAX_SEND_ATTEMPTS, 3); },
   get nudgeOffsetsMin(): number[] {
     const raw = process.env.NUDGE_OFFSETS_MIN ?? "15,45";
