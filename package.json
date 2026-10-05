@@ -2,32 +2,27 @@
   "name": "medbot",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "start": "node --env-file-if-exists=.env --import tsx src/server.ts",
+    "dev": "node --env-file-if-exists=.env --import tsx --watch src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "migrate": "node scripts/migrate.mjs",
-    "set-webhook": "node scripts/set-webhook.mjs"
+    "migrate": "node --env-file-if-exists=.env scripts/migrate.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.9"
   },
   "dependencies": {
     "grammy": "^1.46.0",
     "luxon": "^3.7.2",
-    "next": "^16.3.8",
     "pg": "^8.23.1",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@types/luxon": "^3.7.6",
     "@types/node": "^26.6.4",
     "@types/pg": "^8.23.1",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
   }

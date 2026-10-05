@@ -7,8 +7,6 @@ const d = URL ? describe : describe.skip;
 
 process.env.DATABASE_URL = URL;
 process.env.BOT_TOKEN = "123:TEST";
-process.env.TELEGRAM_WEBHOOK_SECRET = "s";
-process.env.CRON_SECRET = "cron-secret";
 process.env.ADMIN_CHAT_IDS = "900";
 
 const ADMIN = 900, PATIENT = 111, STRANGER = 222;
@@ -334,21 +332,5 @@ d("bot end-to-end (fake Telegram)", () => {
     const linked = await db.query(`SELECT telegram_chat_id FROM people WHERE id=$1`, [r[0].id]);
     expect([333, 444]).toContain(Number(linked[0].telegram_chat_id));
     expect(await db.query(`SELECT 1 FROM invites WHERE used_at IS NOT NULL`)).toHaveLength(1);
-  });
-
-  it("F7/F1: HTTP routes are protected", async () => {
-    const remind = await import("../src/app/api/cron/remind/route");
-    const cleanup = await import("../src/app/api/cron/cleanup/route");
-    const hook = await import("../src/app/api/telegram/route");
-    const health = await import("../src/app/api/health/route");
-    expect((await remind.GET(new Request("http://x/api/cron/remind"))).status).toBe(401);
-    expect((await remind.GET(new Request("http://x", { headers: { authorization: "Bearer nope" } }))).status).toBe(401);
-    const ok = await remind.GET(new Request("http://x", { headers: { authorization: "Bearer cron-secret" } }));
-    expect(ok.status).toBe(200);
-    expect((await cleanup.GET(new Request("http://x"))).status).toBe(401);
-    expect((await cleanup.GET(new Request("http://x", { headers: { authorization: "Bearer cron-secret" } }))).status).toBe(200);
-    const bad = await hook.POST(new Request("http://x/api/telegram", { method: "POST", headers: { "content-type": "application/json", "x-telegram-bot-api-secret-token": "wrong" }, body: "{}" }));
-    expect(bad.status).toBe(401);
-    expect((await health.GET()).status).toBe(200);
   });
 });
