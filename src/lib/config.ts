@@ -12,8 +12,8 @@ export const config = {
     return (process.env.ADMIN_CHAT_IDS ?? "").split(",").map((s) => Number(s.trim())).filter(Number.isFinite);
   },
   get defaultTimezone() { return process.env.DEFAULT_TIMEZONE || "Asia/Tehran"; },
-  get dueWindowMin() { return num(process.env.DUE_WINDOW_MIN, 5); },
-  get staleAfterMin() { return num(process.env.STALE_AFTER_MIN, 5); },
+  get dueWindowMin() { return num(process.env.DUE_WINDOW_MIN, 10); },
+  get staleAfterMin() { return num(process.env.STALE_AFTER_MIN, 10); },
   get staleLookbackMin() { return num(process.env.STALE_LOOKBACK_MIN, 360); },
   get retryWindowMin() { return num(process.env.RETRY_WINDOW_MIN, 15); },
   get missedAfterMin() { return num(process.env.MISSED_AFTER_MIN, 120); },

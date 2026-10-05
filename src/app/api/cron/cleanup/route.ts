@@ -8,5 +8,12 @@ export const maxDuration = 60;
 
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return new Response("unauthorized", { status: 401 });
-  return Response.json({ ok: true, ...(await runCleanup(getBot().api as any)) });
+  try {
+    const res = await runCleanup(getBot().api as any);
+    console.log("cron cleanup", res);
+    return Response.json({ ok: true, ...res });
+  } catch (e: any) {
+    console.error("cron cleanup failed", { message: e?.message, stack: e?.stack });
+    return Response.json({ ok: false, error: String(e?.message ?? e) }, { status: 500 });
+  }
 }
