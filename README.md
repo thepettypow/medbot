@@ -42,7 +42,7 @@ Reminder only: no medical advice, no dose suggestions.
 | Var | Default | |
 |---|---|---|
 | `DEFAULT_TIMEZONE` | `Asia/Tehran` | offered as the quick-tap default. Must be a valid IANA id (`Asia/Tehran`, **not** `Iran/Tehran`) |
-| `DUE_WINDOW_MIN` / `STALE_AFTER_MIN` | 5 / 5 | send window; older than this ⇒ `missed_system` |
+| `DUE_WINDOW_MIN` / `STALE_AFTER_MIN` | 10 / 10 | send window; older than this ⇒ `missed_system` |
 | `MISSED_AFTER_MIN` | 120 | no answer ⇒ `missed` |
 | `NUDGE_OFFSETS_MIN` | `15,45` | re-nudge schedule; empty disables |
 | `SNOOZE_MIN` / `MAX_SNOOZES` | 30 / 2 | |
